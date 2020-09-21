@@ -1,3 +1,5 @@
+import os
+
 import torch
 import numpy as np
 import scipy.sparse as sp
@@ -8,6 +10,10 @@ def load_data(dataset="cora"):
     print("loading {} dataset ... ".format(dataset))
 
     path = "./data/" + dataset + "/"
+    pt_path = "./data/" + dataset + ".pt"
+
+    if os.path.exists(pt_path):
+        return torch.load(pt_path)
 
     if dataset == "cora":
         idx_features_labels = np.genfromtxt("{}{}.content".format(path, dataset), dtype=np.dtype(str))
@@ -19,10 +25,11 @@ def load_data(dataset="cora"):
         edges_unordered = np.genfromtxt("{}{}.cites".format(path, dataset), dtype=np.int32)
         edges = np.array(list(map(idx_map.get, edges_unordered.flatten())), dtype=np.int32).reshape(edges_unordered.shape)
         adj = sp.coo_matrix((np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])), shape=(labels.shape[0], labels.shape[0]), dtype=np.float32)
-
     elif dataset == "citeseer":
         # TODO step 3.
         pass
+    else:
+        raise ValueError("Invalid dataset '{}'".format(dataset))
 
     adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
     features = normalize_features(features)

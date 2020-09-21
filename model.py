@@ -5,14 +5,21 @@ import torch.nn.functional as F
 from layer import GraphConvolutionLayer, GraphAttentionLayer, SparseGraphConvolutionLayer, SparseGraphAttentionLayer
 
 
-# TODO step 1.
 class GCN(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout):
         super(GCN, self).__init__()
-        pass
+        self.layer1 = GraphConvolutionLayer(nfeat, nhid, dropout)
+        self.relu = nn.ReLU()
+        self.layer2 = GraphConvolutionLayer(nhid, nclass, dropout)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x, adj):
-        pass
+        x = self.layer1(x, adj)
+        x = self.relu(x)
+        x = self.layer2(x, adj)
+        if not self.training:
+            x = self.softmax(x)
+        return x
 
 
 # TODO step 2.

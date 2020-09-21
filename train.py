@@ -1,24 +1,44 @@
-import os
 import time
 import random
 import argparse
-import glob
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
 
 from utils import accuracy, load_data
 from model import GCN, GAT, SpGCN, SpGAT
+
+
+class EarlyStopping:
+    def __init__(self, patience):
+        self.patience = patience
+        self.epoch = 0
+
+        self.prev_loss = 1e+9
+        self.prev_acc = 0.
+        self.prev_epoch = 0
+
+    def update(self, loss, acc):
+        self.epoch += 1
+
+        if loss < self.prev_loss:
+            self.prev_epoch = self.epoch
+            self.prev_loss = loss
+
+        if acc > self.prev_acc:
+            self.prev_epoch = self.epoch
+            self.prev_acc = acc
+
+        return self.prev_epoch + self.patience < self.epoch
 
 
 if __name__ == "__main__":
 
     # Training settings
     parser = argparse.ArgumentParser()
+    parser.add_argument("model", choices=["gcn", "gat"], help="GCN or GAT")
     parser.add_argument("--no-cuda", action="store_true", default=False, help="Disables CUDA training.")
     parser.add_argument("--fastmode", action="store_true", default=False, help="Validate during training pass.")
     parser.add_argument("--sparse", action="store_true", default=False, help="GAT with sparse version or not.")
@@ -38,6 +58,7 @@ if __name__ == "__main__":
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
+    # Fix random seeds
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -45,4 +66,65 @@ if __name__ == "__main__":
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
 
-    # TODO
+    device = torch.device("cuda:1" if args.cuda else "cpu")
+
+    # Load dataset
+    adj, features, labels, idx_train, idx_val, idx_test = load_data(args.dataset)
+    nfeatures = features.shape[1]
+    nclass = labels.max() + 1
+
+    # Load model
+    if args.model == "gcn":
+        if args.sparse:
+            model = SpGCN(nfeatures, args.hidden, nclass, args.dropout)
+        else:
+            model = GCN(nfeatures, args.hidden, nclass, args.dropout)
+    elif args.model == "gat":
+        if args.sparse:
+            model = SpGAT(nfeatures, args.hidden, nclass, args.dropout, args.alpha, args.n_heads)
+        else:
+            model = GAT(nfeatures, args.hidden, nclass, args.dropout, args.alpha, args.n_heads)
+    else:
+        raise ValueError("Invalid model '{}'".format(args.model))
+
+    # Move to device
+    model.to(device)
+    adj, features, labels = adj.to(device), features.to(device), labels.to(device)
+
+    # Set optimizer
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    early_stopping = EarlyStopping(args.patience)
+
+    start_time = time.time()
+
+    for epoch in range(1, args.epochs + 1):
+        # Train
+        model.train()
+        optimizer.zero_grad()
+
+        out = model(features, adj)
+        train_acc = accuracy(out[idx_train], labels[idx_train]).item()
+
+        loss = F.cross_entropy(out[idx_train], labels[idx_train])
+        loss.backward()
+        optimizer.step()
+
+        # Validate
+        model.eval()
+        out = model(features, adj)
+
+        val_acc = accuracy(out[idx_val], labels[idx_val]).item()
+        test_acc = accuracy(out[idx_test], labels[idx_test]).item()
+
+        if epoch % args.save_every == 0:
+            torch.save(model.state_dict(), "model/" + model.__class__.__name__ + "-" + args.dataset + "-" + str(epoch) + ".pt")
+
+        print("\rEpoch {:3d}: Loss {:.3f} / Train acc. {:4.1f}% / Val acc. {:4.1f}% / Test acc. {:4.1f}%".format(
+            epoch, loss.item(), train_acc * 100., val_acc * 100., test_acc * 100.
+        ), end="\n")
+
+        if early_stopping.update(loss, val_acc):
+            break
+
+    print("\nTraining time: {:.3f}s".format(time.time() - start_time))

@@ -1,18 +1,22 @@
-
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-# TODO step 1.
 class GraphConvolutionLayer(nn.Module):
     def __init__(self, in_features, out_features, dropout):
         super(GraphConvolutionLayer, self).__init__()
-        pass
 
-    def forward(self, input, adj):
-        pass
+        self.weight = nn.Parameter(torch.Tensor(in_features, out_features))
+        self.weight = nn.init.xavier_uniform_(self.weight, gain=nn.init.calculate_gain("relu"))
+
+        self.dropout = dropout
+
+    def forward(self, x, adj):
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.mm(adj, x)
+        x = torch.mm(x, self.weight)
+        return x
 
 
 # TODO step 2.
