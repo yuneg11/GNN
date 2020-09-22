@@ -39,37 +39,23 @@ class GraphAttentionLayer(nn.Module):
         self.concat = concat
 
     def forward(self, x, adj):
-        n = x.shape[0]
-
         x = F.dropout(x, p=self.dropout, training=self.training)
-        wh = torch.mm(x, self.weight).view(n, self.nheads, self.out_features)
+        wh = torch.mm(x, self.weight).view(-1, self.nheads, self.out_features)
+
+        awh_i = (wh * self.linear_i).sum(dim=2).unsqueeze(dim=1)
+        awh_j = (wh * self.linear_j).sum(dim=2).unsqueeze(dim=0)
+
+        mask = (-1e10 * (1 - adj)).unsqueeze(dim=2)
+        e = F.leaky_relu(awh_i + awh_j, negative_slope=self.alpha) + mask
+        a = F.softmax(e, dim=1).unsqueeze(dim=3)
+        wh = wh.unsqueeze(dim=0)
+
+        x = (a * wh).sum(dim=1)
 
         if self.concat:
-            out_features = self.nheads * self.out_features
+            return x.flatten(start_dim=1)
         else:
-            out_features = self.out_features
-
-        awh_i = (wh * self.linear_i).sum(dim=2)
-        awh_j = (wh * self.linear_j).sum(dim=2)
-
-        hp = torch.Tensor(n, out_features).to(x.device)
-
-        mask = (1 - adj) * -1e10
-
-        for i in range(n):
-            e = F.leaky_relu(awh_i[i] + awh_j, negative_slope=self.alpha)
-            e += mask[i].unsqueeze(dim=1)
-
-            a = F.softmax(e, dim=0).unsqueeze(dim=2)
-
-            out = (a * wh).sum(dim=0)
-
-            if self.concat:
-                hp[i] = out.flatten()
-            else:
-                hp[i] = out.mean(dim=0)
-
-        return hp
+            return x.mean(dim=1)
 
 
 # TODO step 3.

@@ -29,7 +29,7 @@ class GAT(nn.Module):
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x, adj):
-        adj = (adj > 0).float()
+        adj = (adj > 0).float()  # Denormalize
         x = self.layer1(x, adj)
         x = self.elu(x)
         x = self.layer2(x, adj)
