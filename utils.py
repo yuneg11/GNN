@@ -9,36 +9,42 @@ def load_data(dataset="cora"):
 
     print("Loading {} dataset ...".format(dataset), end="", flush=True)
 
-    path = "./data/" + dataset
+    path = "./data/" + dataset + "/"
+    pt_path = path + dataset + ".pt"
 
-    if os.path.exists(path + ".pt"):
-        return torch.load(path + ".pt")
+    if os.path.exists(pt_path):
+        return torch.load(pt_path)
 
-    if dataset == "cora":
-        idx_features_labels = np.genfromtxt(path + "/cora.content", dtype=np.dtype(str))
+    if dataset == "cora" or dataset == "citeseer":
+        sparse = (dataset == "citeseer")
 
-        features = normalize_features(sp.csr_matrix(idx_features_labels[:, 1:-1], dtype=np.float32), sparse=False)
+        idx_features_labels = np.genfromtxt(path + dataset + ".content", dtype=np.dtype(str))
+
+        features = normalize_features(sp.csr_matrix(idx_features_labels[:, 1:-1], dtype=np.float32), sparse=sparse)
         labels = encode_labels(idx_features_labels[:, -1])
 
-        idx = np.array(idx_features_labels[:, 0], dtype=np.int32)
-        idx_map = {j: i for i, j in enumerate(idx)}
+        idx_dict = {j: i for i, j in enumerate(idx_features_labels[:, 0])}
 
-        edges_unordered = np.genfromtxt(path + "/cora.cites", dtype=np.int32)
-        edges = torch.LongTensor(list(map(idx_map.get, edges_unordered.flatten()))).reshape(edges_unordered.shape)
+        edges_raw = np.genfromtxt(path + dataset + ".cites", dtype=np.dtype(str))
+        edges_converted = list(map(lambda x: idx_dict.get(x, -1), edges_raw.flatten()))
+        edges = torch.LongTensor(edges_converted).reshape(edges_raw.shape)
+        edges = edges[~(edges < 0).any(axis=1)]
 
-        adj = create_adj(edges)
-        adj = normalize_adj(adj + sp.eye(adj.shape[0]), sparse=True)
+        adj = create_adj(edges, (labels.shape[0],) * 2)
+        adj = normalize_adj(adj + sp.eye(adj.shape[0]), sparse=sparse)
 
-        idx_train = torch.LongTensor(range(140))
-        idx_val = torch.LongTensor(range(200, 500))
-        idx_test = torch.LongTensor(range(500, 1500))
-    elif dataset == "citeseer":
-        # TODO step 3.
-        pass
+        if dataset == "cora":
+            idx_train = torch.LongTensor(range(140))
+            idx_val = torch.LongTensor(range(200, 500))
+            idx_test = torch.LongTensor(range(500, 1500))
+        else:
+            idx_train = torch.LongTensor(range(140))
+            idx_val = torch.LongTensor(range(200, 500))
+            idx_test = torch.LongTensor(range(500, 1500))
     else:
         raise ValueError("Invalid dataset '{}'".format(dataset))
 
-    torch.save((adj, features, labels, idx_train, idx_val, idx_test), path + ".pt")
+    torch.save((adj, features, labels, idx_train, idx_val, idx_test), pt_path)
 
     return adj, features, labels, idx_train, idx_val, idx_test
 
@@ -49,8 +55,8 @@ def accuracy(output, labels):
     return correct / len(labels)
 
 
-def create_adj(edges):
-    adj = sp.coo_matrix((np.ones(edges.shape[0]), edges.T), shape=(labels.shape[0],)*2, dtype=np.float32)
+def create_adj(edges, shape):
+    adj = sp.coo_matrix((np.ones(edges.shape[0]), edges.T), shape=shape, dtype=np.float32)
     return adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
 
 

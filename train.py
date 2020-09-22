@@ -38,23 +38,22 @@ if __name__ == "__main__":
 
     # Training settings
     parser = argparse.ArgumentParser()
-    parser.add_argument("model", choices=["gcn", "gat"], help="GCN or GAT")
-    parser.add_argument("--no-cuda", action="store_true", default=False, help="Disables CUDA training.")
+    parser.add_argument("model", type=str, choices=["gcn", "gat"], help="GCN or GAT")
+    parser.add_argument("--no-cuda", action="store_true", default=False, help="Disable CUDA training.")
     parser.add_argument("--fastmode", action="store_true", default=False, help="Validate during training pass.")
-    parser.add_argument("--sparse", action="store_true", default=False, help="GAT with sparse version or not.")
+    # parser.add_argument("--sparse", action="store_true", default=False, help="Use sparse version or not.")
     parser.add_argument("--seed", type=int, default=72, help="Random seed.")
     parser.add_argument("--epochs", type=int, default=1000, help="Number of epochs to train.")
     parser.add_argument("--save_every", type=int, default=10, help="Save every n epochs")
-    parser.add_argument("--lr", type=float, default=0.005, help="Initial learning rate.")
+    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate.")
     parser.add_argument("--weight_decay", type=float, default=5e-4, help="Weight decay (L2 loss on parameters).")
     parser.add_argument("--hidden", type=int, default=8, help="Number of hidden units.")
     parser.add_argument("--n_heads", type=int, default=8, help="Number of head attentions.")
     parser.add_argument("--dropout", type=float, default=0.6, help="Dropout rate (1 - keep probability).")
     parser.add_argument("--alpha", type=float, default=0.2, help="Alpha for the leaky_relu.")
-    parser.add_argument("--patience", type=int, default=10, help="patience")
+    parser.add_argument("--patience", type=int, default=10, help="Early stopping patience.")
     parser.add_argument("--dataset", type=str, default="cora", choices=["cora", "citeseer"], help="Dataset to train.")
-    parser.add_argument("-d", "--device")
-
+    parser.add_argument("-d", "--device", type=str, default="cuda", help="Desired device to train.")
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -73,16 +72,17 @@ if __name__ == "__main__":
     # Load dataset
     adj, features, labels, idx_train, idx_val, idx_test = load_data(args.dataset)
     nfeatures = features.shape[1]
-    nclass = labels.max() + 1
+    nclass = len(labels.unique())
+    sparse = (args.dataset == "citeseer")
 
     # Load model
     if args.model == "gcn":
-        if args.sparse:
+        if sparse:
             model = SpGCN(nfeatures, args.hidden, nclass, args.dropout)
         else:
             model = GCN(nfeatures, args.hidden, nclass, args.dropout)
     elif args.model == "gat":
-        if args.sparse:
+        if sparse:
             model = SpGAT(nfeatures, args.hidden, nclass, args.dropout, args.alpha, args.n_heads)
         else:
             model = GAT(nfeatures, args.hidden, nclass, args.dropout, args.alpha, args.n_heads)
@@ -93,12 +93,12 @@ if __name__ == "__main__":
     model.to(device)
     adj, features, labels = adj.to(device), features.to(device), labels.to(device)
 
-    # Set optimizer
+    # Prepare training
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-
     early_stopping = EarlyStopping(args.patience)
 
     start_time = time()
+    save_file_name_format = "model/" + model.__class__.__name__ + "-" + args.dataset + "-{}.pt"
 
     for epoch in range(1, args.epochs + 1):
         epoch_time = time()
@@ -122,9 +122,9 @@ if __name__ == "__main__":
         test_acc = accuracy(out[idx_test], labels[idx_test])
 
         if epoch % args.save_every == 0:
-            torch.save(model.state_dict(), "model/" + model.__class__.__name__ + "-" + args.dataset + "-" + str(epoch) + ".pt")
+            torch.save(model.state_dict(), save_file_name_format.format(epoch))
 
-        print("\rEpoch {:3d}: Loss {:.3f} / Train acc. {:4.1f}% / Val acc. {:4.1f}% / Test acc. {:4.1f}% / {:.3f}s".format(
+        print("\rEpoch {:3d}: Loss {:.3f} / Train {:4.1f}% / Val {:4.1f}% / Test {:4.1f}% / Time {:.3f}s".format(
             epoch, loss.item(), train_acc * 100., val_acc * 100., test_acc * 100., time() - epoch_time
         ), end=("" if epoch % args.save_every else "\n"), flush=True)
 
