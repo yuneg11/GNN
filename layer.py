@@ -79,10 +79,20 @@ class Sparsemm(nn.Module):
 class SparseGraphConvolutionLayer(nn.Module):
     def __init__(self, in_features, out_features, dropout):
         super(SparseGraphConvolutionLayer, self).__init__()
-        pass
 
-    def forward(self, input, adj):
-        pass
+        self.weight = nn.Parameter(torch.Tensor(in_features, out_features))
+        self.weight = nn.init.xavier_uniform_(self.weight, gain=nn.init.calculate_gain("relu"))
+
+        self.dropout = dropout
+
+    def forward(self, x, adj):
+        if x.is_sparse:
+            x = torch.sparse.mm(x, self.weight)
+        else:
+            x = F.dropout(x, p=self.dropout, training=self.training)
+            x = torch.mm(x, self.weight)
+        x = torch.sparse.mm(adj, x)
+        return x
 
 
 class SparseGraphAttentionLayer(nn.Module):

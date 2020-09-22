@@ -37,10 +37,20 @@ def load_data(dataset="cora"):
             idx_train = torch.LongTensor(range(140))
             idx_val = torch.LongTensor(range(200, 500))
             idx_test = torch.LongTensor(range(500, 1500))
+
+            # # Data from torch_geometric
+            # idx_train = torch.LongTensor(range(0, 140))
+            # idx_val = torch.LongTensor(range(140, 640))
+            # idx_test = torch.LongTensor(range(1708, 2708))
         else:
-            idx_train = torch.LongTensor(range(140))
+            idx_train = torch.LongTensor(range(120))
             idx_val = torch.LongTensor(range(200, 500))
             idx_test = torch.LongTensor(range(500, 1500))
+
+            # # Data from torch_geometric
+            # idx_train = torch.LongTensor(range(120))
+            # idx_val = torch.LongTensor(range(120, 620))
+            # idx_test = torch.LongTensor(range(2312, 3312))
     else:
         raise ValueError("Invalid dataset '{}'".format(dataset))
 
