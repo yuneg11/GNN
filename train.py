@@ -4,11 +4,11 @@ import argparse
 
 import numpy as np
 import torch
-import torch.nn.functional as F
-import torch.optim as optim
+from torch import optim
+from torch.nn import functional as F
 
-from utils import accuracy, load_data
 from model import GCN, GAT, SpGCN, SpGAT
+from utils import accuracy, load_data
 
 
 class EarlyStopping:
@@ -53,6 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("--alpha", type=float, default=0.2, help="Alpha for the leaky_relu.")
     parser.add_argument("--patience", type=int, default=10, help="patience")
     parser.add_argument("--dataset", type=str, default="cora", choices=["cora", "citeseer"], help="Dataset to train.")
+    parser.add_argument("-d", "--device")
 
     args = parser.parse_args()
 
@@ -66,7 +67,8 @@ if __name__ == "__main__":
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
 
-    device = torch.device("cuda:1" if args.cuda else "cpu")
+    # device = torch.device("cuda:2" if args.cuda else "cpu")
+    device = torch.device(args.device if args.cuda else "cpu")
 
     # Load dataset
     adj, features, labels, idx_train, idx_val, idx_test = load_data(args.dataset)
@@ -99,6 +101,8 @@ if __name__ == "__main__":
     start_time = time.time()
 
     for epoch in range(1, args.epochs + 1):
+        epoch_time = time.time()
+
         # Train
         model.train()
         optimizer.zero_grad()
@@ -120,9 +124,11 @@ if __name__ == "__main__":
         if epoch % args.save_every == 0:
             torch.save(model.state_dict(), "model/" + model.__class__.__name__ + "-" + args.dataset + "-" + str(epoch) + ".pt")
 
-        print("\rEpoch {:3d}: Loss {:.3f} / Train acc. {:4.1f}% / Val acc. {:4.1f}% / Test acc. {:4.1f}%".format(
-            epoch, loss.item(), train_acc * 100., val_acc * 100., test_acc * 100.
-        ), end="\n")
+        print("\rEpoch {:3d}: Loss {:.3f} / Train acc. {:4.1f}% / Val acc. {:4.1f}% / Test acc. {:4.1f}% / {:.3f}s".format(
+            epoch, loss.item(), train_acc * 100., val_acc * 100., test_acc * 100., time.time() - epoch_time
+        ), end=("" if epoch % args.save_every else "\n"), flush=True)
+
+        epoch_time = time.time()
 
         if early_stopping.update(loss, val_acc):
             break

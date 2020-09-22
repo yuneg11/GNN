@@ -7,7 +7,7 @@ import scipy.sparse as sp
 
 def load_data(dataset="cora"):
 
-    print("loading {} dataset ... ".format(dataset))
+    print("Loading {} dataset ...".format(dataset), end="", flush=True)
 
     path = "./data/" + dataset + "/"
     pt_path = "./data/" + dataset + ".pt"

@@ -1,6 +1,4 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 
 from layer import GraphConvolutionLayer, GraphAttentionLayer, SparseGraphConvolutionLayer, SparseGraphAttentionLayer
 
@@ -22,14 +20,22 @@ class GCN(nn.Module):
         return x
 
 
-# TODO step 2.
 class GAT(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout, alpha, nheads):
         super(GAT, self).__init__()
-        pass
+        self.layer1 = GraphAttentionLayer(nfeat, nhid, dropout, alpha, nheads, concat=True)
+        self.elu = nn.ELU()
+        self.layer2 = GraphAttentionLayer(nhid * nheads, nclass, dropout, alpha, nheads, concat=False)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x, adj):
-        pass
+        adj = (adj > 0).float()
+        x = self.layer1(x, adj)
+        x = self.elu(x)
+        x = self.layer2(x, adj)
+        if not self.training:
+            x = self.softmax(x)
+        return x
 
 
 # TODO step 3.
