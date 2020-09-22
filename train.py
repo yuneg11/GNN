@@ -1,6 +1,6 @@
-import time
 import random
 import argparse
+from time import time
 
 import numpy as np
 import torch
@@ -98,17 +98,17 @@ if __name__ == "__main__":
 
     early_stopping = EarlyStopping(args.patience)
 
-    start_time = time.time()
+    start_time = time()
 
     for epoch in range(1, args.epochs + 1):
-        epoch_time = time.time()
+        epoch_time = time()
 
         # Train
         model.train()
         optimizer.zero_grad()
 
         out = model(features, adj)
-        train_acc = accuracy(out[idx_train], labels[idx_train]).item()
+        train_acc = accuracy(out[idx_train], labels[idx_train])
 
         loss = F.cross_entropy(out[idx_train], labels[idx_train])
         loss.backward()
@@ -118,19 +118,19 @@ if __name__ == "__main__":
         model.eval()
         out = model(features, adj)
 
-        val_acc = accuracy(out[idx_val], labels[idx_val]).item()
-        test_acc = accuracy(out[idx_test], labels[idx_test]).item()
+        val_acc = accuracy(out[idx_val], labels[idx_val])
+        test_acc = accuracy(out[idx_test], labels[idx_test])
 
         if epoch % args.save_every == 0:
             torch.save(model.state_dict(), "model/" + model.__class__.__name__ + "-" + args.dataset + "-" + str(epoch) + ".pt")
 
         print("\rEpoch {:3d}: Loss {:.3f} / Train acc. {:4.1f}% / Val acc. {:4.1f}% / Test acc. {:4.1f}% / {:.3f}s".format(
-            epoch, loss.item(), train_acc * 100., val_acc * 100., test_acc * 100., time.time() - epoch_time
+            epoch, loss.item(), train_acc * 100., val_acc * 100., test_acc * 100., time() - epoch_time
         ), end=("" if epoch % args.save_every else "\n"), flush=True)
 
-        epoch_time = time.time()
+        epoch_time = time()
 
         if early_stopping.update(loss, val_acc):
             break
 
-    print("\nTraining time: {:.3f}s".format(time.time() - start_time))
+    print("\nTraining time: {:.3f}s".format(time() - start_time))
