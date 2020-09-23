@@ -3,6 +3,7 @@ import argparse
 from time import time
 
 import numpy as np
+from matplotlib import pyplot as plt
 
 import torch
 from torch import optim
@@ -17,22 +18,57 @@ class EarlyStopping:
         self.patience = patience
         self.epoch = 0
 
-        self.prev_loss = 1e+9
-        self.prev_acc = 0.
-        self.prev_epoch = 0
+        self.best_loss = 1e+9
+        self.best_acc = 0.
+        self.best_epoch = 0
 
     def update(self, loss, acc):
         self.epoch += 1
 
-        if loss < self.prev_loss:
-            self.prev_epoch = self.epoch
-            self.prev_loss = loss
+        if loss < self.best_loss:
+            self.best_epoch = self.epoch
+            self.best_loss = loss
 
-        if acc > self.prev_acc:
-            self.prev_epoch = self.epoch
-            self.prev_acc = acc
+        if acc > self.best_acc:
+            self.best_epoch = self.epoch
+            self.best_acc = acc
 
-        return self.prev_epoch + self.patience < self.epoch
+        return self.best_epoch + self.patience < self.epoch
+
+
+class History:
+    def __init__(self):
+        self.epochs = []
+        self.train_accs = []
+        self.val_accs = []
+        self.test_accs = []
+
+    def __getitem__(self, epoch):
+        return {
+            "train": self.train_accs[epoch],
+            "val": self.val_accs[epoch],
+            "test": self.test_accs[epoch],
+        }
+
+    def update(self, epoch, train_acc, val_acc, test_acc):
+        self.epochs.append(epoch)
+        self.train_accs.append(train_acc * 100.)
+        self.val_accs.append(val_acc * 100.)
+        self.test_accs.append(test_acc * 100.)
+
+    def save_graph(self, filename, title):
+        plt.title(title, fontsize=14)
+        plt.plot(self.epochs, self.train_accs, label="Train Acc.")
+        plt.plot(self.epochs, self.val_accs, label="Val Acc.")
+        plt.plot(self.epochs, self.test_accs, label="Test Acc.")
+        plt.legend(loc="lower right")
+        plt.xlabel("Epochs")
+        plt.xlim(0, len(self.epochs))
+        plt.ylabel("Accuracy (%)")
+        plt.ylim(0, 100)
+        plt.grid()
+        plt.tight_layout()
+        plt.savefig(filename)
 
 
 if __name__ == "__main__":
@@ -41,7 +77,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("model", type=str, choices=["gcn", "gat"], help="GCN or GAT")
     parser.add_argument("--no-cuda", action="store_true", default=False, help="Disable CUDA training")
-    parser.add_argument("--fastmode", action="store_true", default=False, help="Validate during training pass")
     parser.add_argument("--seed", type=int, default=72, help="Random seed")
     parser.add_argument("--epochs", type=int, default=1000, help="Number of epochs to train")
     parser.add_argument("--save_every", type=int, default=10, help="Save every n epochs")
@@ -95,9 +130,11 @@ if __name__ == "__main__":
     # Prepare training
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     early_stopping = EarlyStopping(args.patience)
+    history = History()
 
     start_time = time()
     save_file_name_format = "model/" + model.__class__.__name__ + "-" + args.dataset + "-{}.pt"
+    graph_file_name = model.__class__.__name__ + "-" + args.dataset + ".png"
 
     for epoch in range(1, args.epochs + 1):
         epoch_time = time()
@@ -120,16 +157,20 @@ if __name__ == "__main__":
         val_acc = accuracy(out[idx_val], labels[idx_val])
         test_acc = accuracy(out[idx_test], labels[idx_test])
 
-        if epoch % args.save_every == 0:
-            torch.save(model.state_dict(), save_file_name_format.format(epoch))
-
         print("\rEpoch {:3d}: Loss {:.3f} / Train {:4.1f}% / Val {:4.1f}% / Test {:4.1f}% / Time {:.3f}s".format(
             epoch, loss.item(), train_acc * 100., val_acc * 100., test_acc * 100., time() - epoch_time
         ), end=("" if epoch % args.save_every else "\n"), flush=True)
 
-        epoch_time = time()
+        if epoch % args.save_every == 0:
+            torch.save(model.state_dict(), save_file_name_format.format(epoch))
+
+        history.update(epoch, train_acc, val_acc, test_acc)
 
         if early_stopping.update(loss, val_acc):
             break
 
     print("\nTraining time: {:.3f}s".format(time() - start_time))
+
+    best_epoch = early_stopping.best_epoch
+    print("Best model: Epoch {} / Test Accuracy {:.2f}%".format(best_epoch, history[best_epoch]["test"]))
+    history.save_graph(graph_file_name, "{} {}".format(model.__class__.__name__, args.dataset))
