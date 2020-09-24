@@ -1,3 +1,4 @@
+import os
 import random
 import argparse
 from time import time
@@ -133,8 +134,9 @@ if __name__ == "__main__":
     history = History()
 
     start_time = time()
-    save_file_name_format = "model/" + model.__class__.__name__ + "-" + args.dataset + "-{}.pt"
+    save_file_name_format = "models/" + model.__class__.__name__ + "-" + args.dataset + "-{}.pt"
     graph_file_name = model.__class__.__name__ + "-" + args.dataset + ".png"
+    os.makedirs("./models", exist_ok=True)
 
     for epoch in range(1, args.epochs + 1):
         epoch_time = time()
